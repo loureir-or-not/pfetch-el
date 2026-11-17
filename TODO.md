@@ -1,1 +1,4 @@
-- [ ] Fix memory display being 0MB / 0MB
+- [x] Fix memory display being 0MB / 0MB
+- [ ] Distro icons?
+- [ ] Packages?
+- [ ] Display information about GNU Emacs?

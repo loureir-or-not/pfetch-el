@@ -85,43 +85,6 @@
     ('gnu/linux (pfetch--get-kernel-linux))
     (_ (error "This does not support anything other than gnu/linux at the moment."))))
 
-(defun pfetch--get-memory-linux ()
-  "Fetch information about the memory of the running Linux system."
-  (with-temp-buffer
-    (insert-file-contents-literally "/proc/meminfo")
-    (let* ((lines (split-string (string-trim (buffer-string)) "\n"))
-           (pairs '()))
-      (dolist (line lines)
-        (setq pair (split-string line ":")
-              key (nth 0 pair)
-              val (string-trim (nth 1 pair)))
-        (push (cons key val) pairs))
-      pairs)))
-
-(defun pfetch--get-memory-total-linux (meminfo)
-  "Find the total memory of the Linux system from `meminfo'."
-  (let ((result 0))
-    (dolist (pair meminfo result)
-      (pcase pair
-        (`("MemTotal" ,x) (setq result (string-to-number x)))
-        (_ '())))))
-
-(defun pfetch--get-memory-available-linux (meminfo)
-  "Find the available memory of the Linux system from `meminfo'."
-  (let ((result 0))
-    (dolist (pair meminfo result)
-      (pcase pair
-        (`("MemAvailable" ,x) (setq result (string-to-number x)))
-        (_ '())))))
-
-(defun pfetch--format-memory-linux (meminfo)
-  "Format a string displaying the memory of the Linux system from `meminfo'."
-  (let ((total-memory (pfetch--get-memory-available-linux meminfo))
-        (available-memory (pfetch--get-memory-available-linux meminfo)))
-    (format "%dMB / %dMB"
-            (truncate (/ total-memory 1000))
-            (truncate (/ available-memory 1000)))))
-
 (defun pfetch--get-uptime-linux ()
   "Get the uptime of the running Linux system."
   (with-temp-buffer
@@ -158,6 +121,59 @@
     ('gnu/linux (pfetch--get-shell-unix))
     (_ (error "This does not support anything other than gnu/linux at the moment."))))
 
+(defun pfetch--get-editor-unix ()
+  "Get the user's editor for UNIX systems."
+  (file-name-nondirectory (getenv "EDITOR")))
+
+(defun pfetch--get-editor ()
+  "Get the user's editor."
+  (pcase system-type
+    ('gnu/linux (pfetch--get-editor-unix))
+    (_ (error "This does not support anything other than gnu/linux at the moment."))))
+
+(defun pfetch--get-wm-unix ()
+  "Get the user's wm for UNIX systems if using XDG_CURRENT_DESKTOP."
+  (downcase (getenv "XDG_CURRENT_DESKTOP")))
+
+(defun pfetch--get-wm ()
+  "Get the user's wm."
+  (pcase system-type
+    ('gnu/linux (pfetch--get-wm-unix))
+    (_ (error "This does not support anything other than `gnu/linux' at the moment."))))
+
+(defun pfetch--get-memory-linux ()
+  "Fetch information about the memory of the running Linux system."
+  (with-temp-buffer
+    (insert-file-contents-literally "/proc/meminfo")
+    (let* ((lines (split-string (string-trim (buffer-string)) "\n"))
+           (pairs '()))
+      (dolist (line lines)
+        (setq pair (split-string line ":")
+              key (nth 0 pair)
+              val (string-trim (nth 1 pair)))
+        (push (cons key val) pairs))
+      pairs)))
+
+(defun pfetch--get-memory-total-linux (meminfo)
+  "Find the total memory of the Linux system from `meminfo'."
+  (let ((result 0))
+    (dolist (pair meminfo result)
+      (pcase pair
+        (`("MemTotal" . ,kb) (setq result (string-to-number (nth 0 (split-string kb " ")))))))))
+
+(defun pfetch--get-memory-available-linux (meminfo)
+  "Find the available memory of the Linux system from `meminfo'."
+  (let ((result 0))
+    (dolist (pair meminfo result)
+      (pcase pair
+        (`("MemAvailable" . ,kb) (setq result (string-to-number (nth 0 (split-string kb " ")))))))))
+
+(defun pfetch--format-memory-linux (meminfo)
+  "Format a string displaying the memory of the Linux system from `meminfo'."
+  (let ((total-memory (pfetch--get-memory-total-linux meminfo))
+        (available-memory (pfetch--get-memory-available-linux meminfo)))
+    (format "%dM / %dM" (/ available-memory 1000) (/ total-memory 1000))))
+
 (defun pfetch--get-memory ()
   "Get the memory of the running system."
   (pcase system-type
@@ -176,7 +192,9 @@
   (let* ((buffer-name (format "*pfetch.el<%s>*" current-prefix-arg))
          (buffer (generate-new-buffer buffer-name))
          (memory (pfetch--get-memory))
-         (uptime (pfetch--get-uptime)))
+         (uptime (pfetch--get-uptime))
+         (editor (pfetch--get-editor))
+         (wm (pfetch--get-wm)))
     (with-current-buffer buffer
       (insert (format "%s@%s\n" user-login-name system-name))
       (insert (format "os\t%s\n" (pfetch--get-os)))
@@ -184,7 +202,11 @@
       (insert (format "kernel\t%s\n" (pfetch--get-kernel)))
       (insert (format "uptime\t%s\n" (pfetch--format-uptime uptime)))
       (insert (format "shell\t%s\n" (pfetch--get-shell)))
-      (insert (format "memory\t%s\n" (pfetch--format-memory memory))))
+      (insert (format "memory\t%s\n" (pfetch--format-memory memory)))
+      (unless (string-empty-p editor)
+        (insert (format "editor\t%s\n" editor)))
+      (unless (string-empty-p wm)
+        (insert (format "wm\t%s\n" wm))))
     (switch-to-buffer buffer-name)
     (read-only-mode t)))
 
